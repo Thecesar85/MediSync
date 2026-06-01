@@ -1,20 +1,31 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_caching import Cache
 from datetime import datetime, timezone
 from marshmallow import ValidationError
-from src.api.schemas import HospitalSchema, ErrorSchema
+from src.api.schemas import HospitalSchema
+from pathlib import Path
+import logging
 import os
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///emergency_portal.db')
+Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+DEFAULT_DATABASE_PATH = Path(app.instance_path) / 'emergency_portal.db'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URI',
+    f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 300  # 5 minutes
 app.config['DOCS_PATH'] = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'docs')
+
+logging.basicConfig(level=os.getenv('LOG_LEVEL', 'INFO'))
+app.logger.setLevel(os.getenv('LOG_LEVEL', 'INFO'))
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -69,6 +80,15 @@ def handle_rate_limit_exceeded(error):
         'message': 'Too many requests',
         'status_code': 429
     }), 429
+
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    app.logger.exception('Unhandled API error: %s', error)
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': 'An unexpected error occurred',
+        'status_code': 500
+    }), 500
 
 # Routes
 @app.route('/')
