@@ -2,7 +2,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.api.app import app, db
+from src.api.app import (
+    app,
+    cache,
+    db,
+    limiter,
+    resolve_log_level,
+    should_enable_debug,
+)
 
 
 class MediSyncApiTests(unittest.TestCase):
@@ -15,8 +22,11 @@ class MediSyncApiTests(unittest.TestCase):
             RATELIMIT_ENABLED=False,
             CACHE_TYPE="NullCache",
         )
+        cache.init_app(app)
+        limiter.enabled = False
         self.client = app.test_client()
         with app.app_context():
+            cache.clear()
             db.drop_all()
             db.create_all()
 
@@ -59,6 +69,14 @@ class MediSyncApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.get_json()["error"], "Not Found")
+
+    def test_invalid_log_level_falls_back_to_info(self):
+        self.assertEqual(resolve_log_level("not-a-level"), 20)
+
+    def test_debug_flag_requires_explicit_truthy_value(self):
+        self.assertFalse(should_enable_debug(None))
+        self.assertFalse(should_enable_debug("false"))
+        self.assertTrue(should_enable_debug("true"))
 
 
 if __name__ == "__main__":

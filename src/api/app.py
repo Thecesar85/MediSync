@@ -10,22 +10,39 @@ from pathlib import Path
 import logging
 import os
 
+
+def resolve_log_level(level_name):
+    normalized_level = str(level_name or 'INFO').upper()
+    return getattr(logging, normalized_level, logging.INFO)
+
+
+def should_enable_debug(value):
+    return str(value or '').lower() in {'1', 'true', 'yes', 'on'}
+
+
 # Initialize Flask app
 app = Flask(__name__)
-Path(app.instance_path).mkdir(parents=True, exist_ok=True)
 DEFAULT_DATABASE_PATH = Path(app.instance_path) / 'emergency_portal.db'
+database_uri = os.getenv('DATABASE_URI')
+if database_uri is None:
+    try:
+        DEFAULT_DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Unable to create Flask instance directory for SQLite database: "
+            f"{DEFAULT_DATABASE_PATH.parent}"
+        ) from exc
+    database_uri = f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-    'DATABASE_URI',
-    f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
-)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 300  # 5 minutes
 app.config['DOCS_PATH'] = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'docs')
 
-logging.basicConfig(level=os.getenv('LOG_LEVEL', 'INFO'))
-app.logger.setLevel(os.getenv('LOG_LEVEL', 'INFO'))
+log_level = resolve_log_level(os.getenv('LOG_LEVEL', 'INFO'))
+logging.basicConfig(level=log_level)
+app.logger.setLevel(log_level)
 
 # Initialize extensions
 db = SQLAlchemy()
@@ -185,4 +202,4 @@ def docs():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(debug=should_enable_debug(os.getenv('FLASK_DEBUG')))
