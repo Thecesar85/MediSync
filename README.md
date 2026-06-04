@@ -42,6 +42,7 @@ The project is structured into two main components:
 - Real-time updates and offline support
 - Responsive design for all devices
 - See [Frontend README](frontend/README.md) for details
+- See [Frontend architecture notes](docs/frontend_architecture.md) for routing, providers, and folder responsibilities
 
 ### Backend (`src/api`)
 - Flask REST API service
