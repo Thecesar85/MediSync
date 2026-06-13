@@ -20,11 +20,14 @@ def should_enable_debug(value):
     return str(value or '').lower() in {'1', 'true', 'yes', 'on'}
 
 
-# Initialize Flask app
-app = Flask(__name__)
-DEFAULT_DATABASE_PATH = Path(app.instance_path) / 'emergency_portal.db'
-database_uri = os.getenv('DATABASE_URI')
-if database_uri is None:
+def resolve_database_uri():
+    database_uri = os.getenv('DATABASE_URI')
+    if database_uri:
+        return database_uri
+    return f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
+
+
+def ensure_default_database_directory():
     try:
         DEFAULT_DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -32,9 +35,12 @@ if database_uri is None:
             f"Unable to create Flask instance directory for SQLite database: "
             f"{DEFAULT_DATABASE_PATH.parent}"
         ) from exc
-    database_uri = f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
 
-app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
+
+# Initialize Flask app
+app = Flask(__name__)
+DEFAULT_DATABASE_PATH = Path(app.instance_path) / 'emergency_portal.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = resolve_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 300  # 5 minutes
@@ -200,6 +206,8 @@ def docs():
         }), 404
 
 if __name__ == '__main__':
+    if app.config['SQLALCHEMY_DATABASE_URI'] == f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}":
+        ensure_default_database_directory()
     with app.app_context():
         db.create_all()
     app.run(debug=should_enable_debug(os.getenv('FLASK_DEBUG')))
