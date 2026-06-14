@@ -16,6 +16,13 @@ class MediSyncApiTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         database_path = Path(self.temp_dir.name) / "test_emergency_portal.db"
+        self.original_config = {
+            "TESTING": app.config.get("TESTING"),
+            "SQLALCHEMY_DATABASE_URI": app.config.get("SQLALCHEMY_DATABASE_URI"),
+            "RATELIMIT_ENABLED": app.config.get("RATELIMIT_ENABLED"),
+            "CACHE_TYPE": app.config.get("CACHE_TYPE"),
+        }
+        self.original_limiter_enabled = limiter.enabled
         app.config.update(
             TESTING=True,
             SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path.as_posix()}",
@@ -34,6 +41,11 @@ class MediSyncApiTests(unittest.TestCase):
         with app.app_context():
             db.session.remove()
             db.drop_all()
+            db.engine.dispose()
+            cache.clear()
+        app.config.update(self.original_config)
+        cache.init_app(app)
+        limiter.enabled = self.original_limiter_enabled
         self.temp_dir.cleanup()
 
     def test_health_check(self):
